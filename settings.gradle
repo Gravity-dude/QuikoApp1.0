@@ -1,0 +1,2 @@
+rootProject.name = "QuikoApp"
+include ':app'
