@@ -14,14 +14,869 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show ALL files
-        run: find . -not -path './.git/*' | sort
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Show app build.gradle
-        run: cat app/build.gradle
+      - name: Create project structure
+        run: |
+          mkdir -p app/src/main/java/com/quiko/app
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+          mkdir -p gradle/wrapper
 
-      - name: Show root build.gradle
-        run: cat build.gradle
+      - name: Write gradle wrapper properties
+        run: |
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
 
-      - name: Show settings.gradle
-        run: cat settings.gradle
+      - name: Write app build.gradle
+        run: |
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.quiko.app'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.quiko.app"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+          }
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+              implementation 'androidx.recyclerview:recyclerview:1.3.2'
+              implementation 'androidx.cardview:cardview:1.0.0'
+              implementation 'androidx.core:core:1.12.0'
+          }
+          EOF
+
+      - name: Write root build.gradle
+        run: |
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.2'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+      - name: Write settings.gradle
+        run: |
+          cat > settings.gradle << 'EOF'
+          rootProject.name = "QuikoApp"
+          include ':app'
+          EOF
+
+      - name: Write AndroidManifest
+        run: |
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.RECORD_AUDIO" />
+              <uses-permission android:name="android.permission.CAMERA" />
+              <uses-permission android:name="android.permission.FLASHLIGHT" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+              <uses-feature android:name="android.hardware.microphone" android:required="true" />
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_quiko"
+                  android:label="@string/app_name"
+                  android:roundIcon="@drawable/ic_quiko"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.QuikoApp">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop"
+                      android:screenOrientation="portrait">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <service
+                      android:name=".VoiceListenerService"
+                      android:enabled="true"
+                      android:exported="false"
+                      android:foregroundServiceType="microphone" />
+                  <receiver android:name=".AlarmReceiver" android:enabled="true" android:exported="false">
+                      <intent-filter>
+                          <action android:name="com.quiko.app.ALARM_TRIGGER" />
+                      </intent-filter>
+                  </receiver>
+                  <receiver android:name=".ReminderReceiver" android:enabled="true" android:exported="false">
+                      <intent-filter>
+                          <action android:name="com.quiko.app.REMINDER_TRIGGER" />
+                      </intent-filter>
+                  </receiver>
+                  <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false">
+                      <intent-filter android:priority="1000">
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Write Java source files
+        run: |
+          cat > app/src/main/java/com/quiko/app/Reminder.java << 'EOF'
+          package com.quiko.app;
+          public class Reminder {
+              public long id;
+              public String task;
+              public long triggerTimeMs;
+              public boolean done;
+              public Reminder(long id, String task, long triggerTimeMs, boolean done) {
+                  this.id = id; this.task = task;
+                  this.triggerTimeMs = triggerTimeMs; this.done = done;
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/quiko/app/SoundHelper.java << 'EOF'
+          package com.quiko.app;
+          import android.content.Context;
+          import android.media.AudioManager;
+          import android.media.ToneGenerator;
+          public class SoundHelper {
+              public static void playActivationBeep(Context context) {
+                  try {
+                      ToneGenerator tg = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80);
+                      tg.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
+                  } catch (Exception ignored) {}
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/quiko/app/BootReceiver.java << 'EOF'
+          package com.quiko.app;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import androidx.core.content.ContextCompat;
+          public class BootReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+                      Intent serviceIntent = new Intent(context, VoiceListenerService.class);
+                      serviceIntent.setAction("START");
+                      ContextCompat.startForegroundService(context, serviceIntent);
+                  }
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/quiko/app/DatabaseHelper.java << 'EOF'
+          package com.quiko.app;
+          import android.content.ContentValues;
+          import android.content.Context;
+          import android.database.Cursor;
+          import android.database.sqlite.SQLiteDatabase;
+          import android.database.sqlite.SQLiteOpenHelper;
+          import java.util.ArrayList;
+          import java.util.List;
+          public class DatabaseHelper extends SQLiteOpenHelper {
+              private static final String DB_NAME = "quiko.db";
+              private static final int DB_VERSION = 1;
+              static final String TABLE = "reminders";
+              static final String COL_ID = "id";
+              static final String COL_TASK = "task";
+              static final String COL_TIME = "trigger_time";
+              static final String COL_DONE = "done";
+              public DatabaseHelper(Context context) { super(context, DB_NAME, null, DB_VERSION); }
+              @Override
+              public void onCreate(SQLiteDatabase db) {
+                  db.execSQL("CREATE TABLE " + TABLE + " (" + COL_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " + COL_TASK + " TEXT NOT NULL, " + COL_TIME + " INTEGER NOT NULL, " + COL_DONE + " INTEGER DEFAULT 0)");
+              }
+              @Override
+              public void onUpgrade(SQLiteDatabase db, int oldV, int newV) { db.execSQL("DROP TABLE IF EXISTS " + TABLE); onCreate(db); }
+              public long insertReminder(Reminder r) {
+                  ContentValues cv = new ContentValues();
+                  cv.put(COL_TASK, r.task); cv.put(COL_TIME, r.triggerTimeMs); cv.put(COL_DONE, r.done ? 1 : 0);
+                  return getWritableDatabase().insert(TABLE, null, cv);
+              }
+              public List<Reminder> getAllReminders() {
+                  List<Reminder> list = new ArrayList<>();
+                  Cursor c = getReadableDatabase().query(TABLE, null, null, null, null, null, COL_TIME + " ASC");
+                  if (c.moveToFirst()) {
+                      do {
+                          list.add(new Reminder(c.getLong(c.getColumnIndexOrThrow(COL_ID)), c.getString(c.getColumnIndexOrThrow(COL_TASK)), c.getLong(c.getColumnIndexOrThrow(COL_TIME)), c.getInt(c.getColumnIndexOrThrow(COL_DONE)) == 1));
+                      } while (c.moveToNext());
+                  }
+                  c.close(); return list;
+              }
+              public void markReminderDone(long id) {
+                  ContentValues cv = new ContentValues(); cv.put(COL_DONE, 1);
+                  getWritableDatabase().update(TABLE, cv, COL_ID + "=?", new String[]{String.valueOf(id)});
+              }
+              public void deleteReminder(long id) { getWritableDatabase().delete(TABLE, COL_ID + "=?", new String[]{String.valueOf(id)}); }
+              public void deleteAllReminders() { getWritableDatabase().delete(TABLE, null, null); }
+          }
+          EOF
+
+      - name: Write AlarmReceiver
+        run: |
+          cat > app/src/main/java/com/quiko/app/AlarmReceiver.java << 'EOF'
+          package com.quiko.app;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.media.RingtoneManager;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.VibrationEffect;
+          import android.os.Vibrator;
+          import androidx.core.app.NotificationCompat;
+          public class AlarmReceiver extends BroadcastReceiver {
+              private static final String CHANNEL_ID = "quiko_alarm";
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  String label = intent.getStringExtra("label");
+                  String time = intent.getStringExtra("time");
+                  if (label == null) label = "Quiko Alarm";
+                  if (time == null) time = "Now";
+                  NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Quiko Alarms", NotificationManager.IMPORTANCE_HIGH);
+                  NotificationManager nm = context.getSystemService(NotificationManager.class);
+                  if (nm != null) nm.createNotificationChannel(ch);
+                  Intent dismiss = new Intent(context, MainActivity.class);
+                  PendingIntent pi = PendingIntent.getActivity(context, 0, dismiss, PendingIntent.FLAG_IMMUTABLE);
+                  NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
+                      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                      .setContentTitle("Alarm: " + label)
+                      .setContentText("Set for " + time)
+                      .setPriority(NotificationCompat.PRIORITY_MAX)
+                      .setCategory(NotificationCompat.CATEGORY_ALARM)
+                      .setFullScreenIntent(pi, true)
+                      .setAutoCancel(true).setContentIntent(pi);
+                  if (nm != null) nm.notify(2000, builder.build());
+                  try {
+                      Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                      android.media.Ringtone r = RingtoneManager.getRingtone(context, uri);
+                      if (r != null) r.play();
+                  } catch (Exception ignored) {}
+                  Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                  if (v != null) {
+                      long[] pattern = {0, 500, 200, 500, 200, 500};
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                          v.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                      else v.vibrate(pattern, -1);
+                  }
+              }
+          }
+          EOF
+
+      - name: Write ReminderReceiver
+        run: |
+          cat > app/src/main/java/com/quiko/app/ReminderReceiver.java << 'EOF'
+          package com.quiko.app;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.media.RingtoneManager;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.VibrationEffect;
+          import android.os.Vibrator;
+          import androidx.core.app.NotificationCompat;
+          public class ReminderReceiver extends BroadcastReceiver {
+              private static final String CHANNEL_ID = "quiko_reminders";
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  String task = intent.getStringExtra("task");
+                  int reminderId = intent.getIntExtra("id", -1);
+                  if (task == null) task = "Reminder";
+                  if (reminderId != -1) new DatabaseHelper(context).markReminderDone(reminderId);
+                  NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Quiko Reminders", NotificationManager.IMPORTANCE_HIGH);
+                  NotificationManager nm = context.getSystemService(NotificationManager.class);
+                  if (nm != null) nm.createNotificationChannel(ch);
+                  Intent openApp = new Intent(context, MainActivity.class);
+                  PendingIntent pi = PendingIntent.getActivity(context, reminderId, openApp, PendingIntent.FLAG_IMMUTABLE);
+                  Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                  NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
+                      .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                      .setContentTitle("Quiko Reminder")
+                      .setContentText(task)
+                      .setPriority(NotificationCompat.PRIORITY_HIGH)
+                      .setSound(soundUri).setAutoCancel(true).setContentIntent(pi);
+                  if (nm != null) nm.notify(3000 + reminderId, builder.build());
+                  Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                  if (v != null) {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                          v.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE));
+                      else v.vibrate(400);
+                  }
+              }
+          }
+          EOF
+
+      - name: Write ReminderAdapter
+        run: |
+          cat > app/src/main/java/com/quiko/app/ReminderAdapter.java << 'EOF'
+          package com.quiko.app;
+          import android.graphics.Paint;
+          import android.view.LayoutInflater;
+          import android.view.View;
+          import android.view.ViewGroup;
+          import android.widget.ImageButton;
+          import android.widget.TextView;
+          import androidx.annotation.NonNull;
+          import androidx.recyclerview.widget.RecyclerView;
+          import java.text.SimpleDateFormat;
+          import java.util.Date;
+          import java.util.List;
+          import java.util.Locale;
+          public class ReminderAdapter extends RecyclerView.Adapter<ReminderAdapter.VH> {
+              interface OnDeleteListener { void onDelete(Reminder r); }
+              private List<Reminder> items;
+              private final OnDeleteListener deleteListener;
+              private final SimpleDateFormat sdf = new SimpleDateFormat("MMM d, h:mm a", Locale.US);
+              public ReminderAdapter(List<Reminder> items, OnDeleteListener l) { this.items = items; this.deleteListener = l; }
+              public void updateData(List<Reminder> newItems) { this.items = newItems; notifyDataSetChanged(); }
+              @NonNull @Override
+              public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                  View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_reminder, parent, false);
+                  return new VH(v);
+              }
+              @Override
+              public void onBindViewHolder(@NonNull VH holder, int position) {
+                  Reminder r = items.get(position);
+                  holder.tvTask.setText(r.task);
+                  holder.tvTime.setText(sdf.format(new Date(r.triggerTimeMs)));
+                  if (r.done) { holder.tvTask.setPaintFlags(holder.tvTask.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG); holder.tvTask.setAlpha(0.5f); }
+                  else { holder.tvTask.setPaintFlags(holder.tvTask.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG); holder.tvTask.setAlpha(1.0f); }
+                  holder.btnDelete.setOnClickListener(v -> deleteListener.onDelete(r));
+              }
+              @Override public int getItemCount() { return items.size(); }
+              static class VH extends RecyclerView.ViewHolder {
+                  TextView tvTask, tvTime; ImageButton btnDelete;
+                  VH(@NonNull View itemView) {
+                      super(itemView);
+                      tvTask = itemView.findViewById(R.id.tvTask);
+                      tvTime = itemView.findViewById(R.id.tvTime);
+                      btnDelete = itemView.findViewById(R.id.btnDelete);
+                  }
+              }
+          }
+          EOF
+
+      - name: Write CommandProcessor
+        run: |
+          cat > app/src/main/java/com/quiko/app/CommandProcessor.java << 'EOF'
+          package com.quiko.app;
+          import android.app.AlarmManager;
+          import android.app.PendingIntent;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.hardware.camera2.CameraAccessException;
+          import android.hardware.camera2.CameraManager;
+          import android.os.Build;
+          import android.speech.tts.TextToSpeech;
+          import android.util.Log;
+          import java.util.Calendar;
+          import java.util.HashMap;
+          import java.util.Locale;
+          import java.util.Map;
+          import java.util.regex.Matcher;
+          import java.util.regex.Pattern;
+          public class CommandProcessor {
+              private static final String TAG = "CommandProcessor";
+              private final Context context;
+              private final AlarmManager alarmManager;
+              private final DatabaseHelper dbHelper;
+              private TextToSpeech tts;
+              private String torchCameraId;
+              private static final Map<String, Integer> NUMBER_WORDS = new HashMap<>();
+              static {
+                  String[] ones = {"zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"};
+                  String[] tens = {"","","twenty","thirty","forty","fifty"};
+                  for (int i = 0; i < ones.length; i++) NUMBER_WORDS.put(ones[i], i);
+                  for (int i = 2; i < tens.length; i++) NUMBER_WORDS.put(tens[i], i * 10);
+              }
+              public CommandProcessor(Context context) {
+                  this.context = context.getApplicationContext();
+                  this.alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                  this.dbHelper = new DatabaseHelper(context);
+                  tts = new TextToSpeech(context, status -> { if (status == TextToSpeech.SUCCESS) tts.setLanguage(Locale.US); });
+                  try {
+                      CameraManager cm = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                      for (String id : cm.getCameraIdList()) {
+                          if (cm.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == Boolean.TRUE) { torchCameraId = id; break; }
+                      }
+                  } catch (CameraAccessException e) { Log.e(TAG, "Camera init error", e); }
+              }
+              public String process(String command) {
+                  command = command.trim().toLowerCase();
+                  if (command.isEmpty()) return "I didn't catch that.";
+                  if (command.contains("alarm") && command.contains("cancel")) return cancelAlarm();
+                  if (command.contains("alarm") || command.contains("set alarm")) return setAlarm(command);
+                  if (command.contains("flash") || command.contains("torch") || command.contains("light")) {
+                      boolean on = !command.contains("off");
+                      return toggleFlashlight(on);
+                  }
+                  if (command.contains("remind") || command.contains("reminder")) return setReminder(command);
+                  if (command.contains("time")) return tellTime();
+                  if (command.contains("help")) return help();
+                  return "Command not recognised. Try: set alarm, flashlight on, remind me, or help.";
+              }
+              private String setAlarm(String command) {
+                  Calendar cal = parseTime(command);
+                  if (cal == null) { speak("Sorry, I couldn't understand the time."); return "Could not parse time from: " + command; }
+                  if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_YEAR, 1);
+                  Intent alarmIntent = new Intent(context, AlarmReceiver.class);
+                  alarmIntent.setAction("com.quiko.app.ALARM_TRIGGER");
+                  alarmIntent.putExtra("label", "Quiko Alarm");
+                  alarmIntent.putExtra("time", formatTime(cal));
+                  PendingIntent pi = PendingIntent.getBroadcast(context, (int) cal.getTimeInMillis(), alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                  try {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms())
+                          alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), pi);
+                      else alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), pi);
+                  } catch (SecurityException e) { alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), pi); }
+                  String timeStr = formatTime(cal);
+                  speak("Alarm set for " + timeStr);
+                  return "Alarm set for " + timeStr;
+              }
+              private String cancelAlarm() {
+                  Intent i = new Intent(context, AlarmReceiver.class);
+                  PendingIntent pi = PendingIntent.getBroadcast(context, 0, i, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+                  if (pi != null) { alarmManager.cancel(pi); pi.cancel(); speak("Alarm cancelled"); return "Alarm cancelled"; }
+                  speak("No alarm found"); return "No active alarm found";
+              }
+              private String toggleFlashlight(boolean on) {
+                  if (torchCameraId == null) return "No flashlight found on this device";
+                  try {
+                      CameraManager cm = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+                      cm.setTorchMode(torchCameraId, on);
+                      String msg = on ? "Flashlight on" : "Flashlight off";
+                      speak(msg); return msg;
+                  } catch (CameraAccessException e) { return "Flashlight error: " + e.getMessage(); }
+              }
+              private String setReminder(String command) {
+                  String task = command.replaceAll("(?i)hey quiko", "").replaceAll("(?i)remind me to", "").replaceAll("(?i)remind me", "").replaceAll("(?i)set a reminder", "").replaceAll("(?i)reminder", "").trim();
+                  Calendar cal = parseTime(command);
+                  long triggerAt; String timeDisplay;
+                  if (cal != null) {
+                      if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_YEAR, 1);
+                      triggerAt = cal.getTimeInMillis(); timeDisplay = formatTime(cal);
+                      task = task.replaceAll("(?i)(at|in)\\s+\\d+.*", "").trim();
+                  } else {
+                      cal = Calendar.getInstance(); cal.add(Calendar.HOUR_OF_DAY, 1);
+                      triggerAt = cal.getTimeInMillis(); timeDisplay = formatTime(cal) + " (1h from now)";
+                  }
+                  if (task.isEmpty()) task = "Reminder";
+                  Reminder reminder = new Reminder(0, task, triggerAt, false);
+                  long id = dbHelper.insertReminder(reminder);
+                  Intent reminderIntent = new Intent(context, ReminderReceiver.class);
+                  reminderIntent.setAction("com.quiko.app.REMINDER_TRIGGER");
+                  reminderIntent.putExtra("task", task); reminderIntent.putExtra("id", (int) id);
+                  PendingIntent pi = PendingIntent.getBroadcast(context, (int) id, reminderIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                  try {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms())
+                          alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                      else alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                  } catch (SecurityException e) { alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pi); }
+                  speak("Reminder set: " + task + " at " + timeDisplay);
+                  return "Reminder: " + task + " at " + timeDisplay;
+              }
+              private String tellTime() {
+                  Calendar now = Calendar.getInstance();
+                  String timeStr = String.format(Locale.US, "%d:%02d %s", now.get(Calendar.HOUR) == 0 ? 12 : now.get(Calendar.HOUR), now.get(Calendar.MINUTE), now.get(Calendar.AM_PM) == Calendar.AM ? "AM" : "PM");
+                  speak("It is " + timeStr); return "Current time: " + timeStr;
+              }
+              private String help() {
+                  String msg = "You can say: set alarm at 7 AM, flashlight on, remind me to take medicine at 8 PM, what time is it, or cancel alarm.";
+                  speak(msg); return msg;
+              }
+              private Calendar parseTime(String text) {
+                  text = text.toLowerCase(Locale.US);
+                  Pattern inPattern = Pattern.compile("in\\s+(\\w+)\\s+(minute|minutes|min|hour|hours|hr)");
+                  Matcher m = inPattern.matcher(text);
+                  if (m.find()) { int amount = parseNumber(m.group(1)); if (amount > 0) { Calendar cal = Calendar.getInstance(); if (m.group(2).startsWith("h")) cal.add(Calendar.HOUR_OF_DAY, amount); else cal.add(Calendar.MINUTE, amount); cal.set(Calendar.SECOND, 0); return cal; } }
+                  Pattern atPattern = Pattern.compile("(?:at\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm|a\\.m|p\\.m)");
+                  m = atPattern.matcher(text);
+                  if (m.find()) { int hour = Integer.parseInt(m.group(1)); int minute = m.group(2) != null ? Integer.parseInt(m.group(2)) : 0; boolean isPm = m.group(3).startsWith("p"); if (isPm && hour != 12) hour += 12; if (!isPm && hour == 12) hour = 0; Calendar cal = Calendar.getInstance(); cal.set(Calendar.HOUR_OF_DAY, hour); cal.set(Calendar.MINUTE, minute); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); return cal; }
+                  Pattern militaryPattern = Pattern.compile("(?:at\\s+)?(\\d{1,2}):(\\d{2})");
+                  m = militaryPattern.matcher(text);
+                  if (m.find()) { int hour = Integer.parseInt(m.group(1)); int minute = Integer.parseInt(m.group(2)); if (hour <= 23 && minute <= 59) { Calendar cal = Calendar.getInstance(); cal.set(Calendar.HOUR_OF_DAY, hour); cal.set(Calendar.MINUTE, minute); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); return cal; } }
+                  return null;
+              }
+              private int parseNumber(String word) { try { return Integer.parseInt(word); } catch (NumberFormatException e) { Integer v = NUMBER_WORDS.get(word.toLowerCase()); return v != null ? v : -1; } }
+              private String formatTime(Calendar cal) { int h = cal.get(Calendar.HOUR); if (h == 0) h = 12; return String.format(Locale.US, "%d:%02d %s", h, cal.get(Calendar.MINUTE), cal.get(Calendar.AM_PM) == Calendar.AM ? "AM" : "PM"); }
+              private void speak(String text) { if (tts != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "quiko_tts"); }
+          }
+          EOF
+
+      - name: Write VoiceListenerService
+        run: |
+          cat > app/src/main/java/com/quiko/app/VoiceListenerService.java << 'EOF'
+          package com.quiko.app;
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.IBinder;
+          import android.os.Looper;
+          import android.speech.RecognitionListener;
+          import android.speech.RecognizerIntent;
+          import android.speech.SpeechRecognizer;
+          import android.util.Log;
+          import androidx.core.app.NotificationCompat;
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Locale;
+          public class VoiceListenerService extends Service {
+              private static final String TAG = "VoiceListenerService";
+              private static final String CHANNEL_ID = "quiko_channel";
+              private static final int NOTIF_ID = 1;
+              private static final String[] WAKE_WORDS = {"hey quiko","hey quicko","hey quick o","quiko","hey kiko"};
+              private enum State { WAKE_LISTENING, COMMAND_LISTENING }
+              private State currentState = State.WAKE_LISTENING;
+              private SpeechRecognizer speechRecognizer;
+              private final Handler handler = new Handler(Looper.getMainLooper());
+              private CommandProcessor commandProcessor;
+              private boolean serviceRunning = false;
+              public interface StatusCallback { void onUpdate(String status, String lastCommand); }
+              private static StatusCallback statusCallback;
+              public static void setStatusCallback(StatusCallback cb) { statusCallback = cb; }
+              @Override public void onCreate() { super.onCreate(); commandProcessor = new CommandProcessor(this); createNotificationChannel(); }
+              @Override
+              public int onStartCommand(Intent intent, int flags, int startId) {
+                  if (intent != null && "STOP".equals(intent.getAction())) { stopListening(); stopForeground(true); stopSelf(); return START_NOT_STICKY; }
+                  startForeground(NOTIF_ID, buildNotification("Listening for Hey Quiko..."));
+                  serviceRunning = true; initSpeechRecognizer(); startWakeWordListening();
+                  return START_STICKY;
+              }
+              @Override public IBinder onBind(Intent intent) { return null; }
+              private void initSpeechRecognizer() {
+                  if (speechRecognizer != null) speechRecognizer.destroy();
+                  speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                  speechRecognizer.setRecognitionListener(new QuikoRecognitionListener());
+              }
+              private Intent buildRecognitionIntent() {
+                  Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+                  i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
+                  i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
+                  return i;
+              }
+              private void startWakeWordListening() {
+                  if (!serviceRunning) return;
+                  currentState = State.WAKE_LISTENING;
+                  updateNotification("Listening for Hey Quiko...");
+                  updateStatus("Listening for Hey Quiko...", null);
+                  handler.postDelayed(() -> { if (serviceRunning && speechRecognizer != null) speechRecognizer.startListening(buildRecognitionIntent()); }, 300);
+              }
+              private void startCommandListening() {
+                  if (!serviceRunning) return;
+                  currentState = State.COMMAND_LISTENING;
+                  updateStatus("Hey Quiko! Speak your command...", null);
+                  SoundHelper.playActivationBeep(this);
+                  initSpeechRecognizer();
+                  handler.postDelayed(() -> { if (serviceRunning && speechRecognizer != null) speechRecognizer.startListening(buildRecognitionIntent()); }, 600);
+              }
+              private void stopListening() {
+                  serviceRunning = false;
+                  if (speechRecognizer != null) { speechRecognizer.stopListening(); speechRecognizer.cancel(); speechRecognizer.destroy(); speechRecognizer = null; }
+              }
+              private boolean containsWakeWord(String text) { for (String ww : WAKE_WORDS) { if (text.contains(ww)) return true; } return false; }
+              private void processCommand(String command, List<String> allResults) {
+                  for (String ww : WAKE_WORDS) command = command.replace(ww, "").trim();
+                  if (command.isEmpty() && allResults.size() > 1) command = allResults.get(1).toLowerCase().trim();
+                  String feedback = commandProcessor.process(command);
+                  updateStatus(command + " -> " + feedback, command);
+                  handler.postDelayed(this::startWakeWordListening, 1500);
+              }
+              private class QuikoRecognitionListener implements RecognitionListener {
+                  @Override public void onReadyForSpeech(Bundle p) {}
+                  @Override public void onBeginningOfSpeech() {}
+                  @Override public void onRmsChanged(float r) {}
+                  @Override public void onBufferReceived(byte[] b) {}
+                  @Override public void onEndOfSpeech() {}
+                  @Override public void onEvent(int e, Bundle p) {}
+                  @Override public void onPartialResults(Bundle partialResults) {
+                      if (currentState == State.WAKE_LISTENING) {
+                          ArrayList<String> partial = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                          if (partial != null) { for (String text : partial) { if (containsWakeWord(text.toLowerCase())) { speechRecognizer.cancel(); startCommandListening(); return; } } }
+                      }
+                  }
+                  @Override
+                  public void onResults(Bundle results) {
+                      ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                      if (matches == null || matches.isEmpty()) { handler.postDelayed(() -> { if (serviceRunning) { initSpeechRecognizer(); startWakeWordListening(); } }, 400); return; }
+                      String topResult = matches.get(0).toLowerCase().trim();
+                      if (currentState == State.WAKE_LISTENING) { if (containsWakeWord(topResult)) startCommandListening(); else handler.postDelayed(() -> { if (serviceRunning) { initSpeechRecognizer(); startWakeWordListening(); } }, 400); }
+                      else if (currentState == State.COMMAND_LISTENING) processCommand(topResult, matches);
+                  }
+                  @Override
+                  public void onError(int error) { handler.postDelayed(() -> { if (serviceRunning) { initSpeechRecognizer(); startWakeWordListening(); } }, 1000); }
+              }
+              private void createNotificationChannel() {
+                  NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Quiko Voice Assistant", NotificationManager.IMPORTANCE_LOW);
+                  NotificationManager nm = getSystemService(NotificationManager.class);
+                  if (nm != null) nm.createNotificationChannel(channel);
+              }
+              private Notification buildNotification(String text) {
+                  Intent mainIntent = new Intent(this, MainActivity.class);
+                  PendingIntent pi = PendingIntent.getActivity(this, 0, mainIntent, PendingIntent.FLAG_IMMUTABLE);
+                  return new NotificationCompat.Builder(this, CHANNEL_ID)
+                      .setContentTitle("Quiko Assistant").setContentText(text)
+                      .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                      .setContentIntent(pi).setOngoing(true).setPriority(NotificationCompat.PRIORITY_LOW).build();
+              }
+              private void updateNotification(String text) { NotificationManager nm = getSystemService(NotificationManager.class); if (nm != null) nm.notify(NOTIF_ID, buildNotification(text)); }
+              private void updateStatus(String status, String lastCmd) { if (statusCallback != null) statusCallback.onUpdate(status, lastCmd); }
+              @Override public void onDestroy() { stopListening(); super.onDestroy(); }
+          }
+          EOF
+
+      - name: Write MainActivity
+        run: |
+          cat > app/src/main/java/com/quiko/app/MainActivity.java << 'EOF'
+          package com.quiko.app;
+          import android.Manifest;
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.widget.TextView;
+          import android.widget.Toast;
+          import androidx.annotation.NonNull;
+          import androidx.appcompat.app.AppCompatActivity;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+          import androidx.recyclerview.widget.LinearLayoutManager;
+          import androidx.recyclerview.widget.RecyclerView;
+          import com.google.android.material.floatingactionbutton.FloatingActionButton;
+          import com.google.android.material.switchmaterial.SwitchMaterial;
+          import java.util.List;
+          public class MainActivity extends AppCompatActivity {
+              private static final int PERMISSION_REQUEST_CODE = 101;
+              private TextView tvStatus, tvLastCommand;
+              private SwitchMaterial switchListening;
+              private RecyclerView rvReminders;
+              private ReminderAdapter reminderAdapter;
+              private DatabaseHelper dbHelper;
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+                  dbHelper = new DatabaseHelper(this);
+                  tvStatus = findViewById(R.id.tvStatus);
+                  tvLastCommand = findViewById(R.id.tvLastCommand);
+                  switchListening = findViewById(R.id.switchListening);
+                  rvReminders = findViewById(R.id.rvReminders);
+                  rvReminders.setLayoutManager(new LinearLayoutManager(this));
+                  switchListening.setOnCheckedChangeListener((buttonView, isChecked) -> { if (isChecked) startVoiceService(); else stopVoiceService(); });
+                  FloatingActionButton fabClear = findViewById(R.id.fabClear);
+                  fabClear.setOnClickListener(v -> { dbHelper.deleteAllReminders(); loadReminders(); Toast.makeText(this, "Reminders cleared", Toast.LENGTH_SHORT).show(); });
+                  VoiceListenerService.setStatusCallback((status, lastCmd) -> runOnUiThread(() -> { if (status != null) tvStatus.setText(status); if (lastCmd != null) { tvLastCommand.setText("Last: " + lastCmd); loadReminders(); } }));
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { switchListening.setChecked(true); }
+                  else { String[] perms = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS} : new String[]{Manifest.permission.RECORD_AUDIO}; ActivityCompat.requestPermissions(this, perms, PERMISSION_REQUEST_CODE); }
+                  loadReminders();
+              }
+              private void startVoiceService() {
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { switchListening.setChecked(false); return; }
+                  Intent serviceIntent = new Intent(this, VoiceListenerService.class); serviceIntent.setAction("START");
+                  ContextCompat.startForegroundService(this, serviceIntent);
+                  tvStatus.setText("Listening for Hey Quiko...");
+              }
+              private void stopVoiceService() {
+                  Intent serviceIntent = new Intent(this, VoiceListenerService.class); serviceIntent.setAction("STOP");
+                  startService(serviceIntent); tvStatus.setText("Paused");
+              }
+              private void loadReminders() {
+                  List<Reminder> reminders = dbHelper.getAllReminders();
+                  if (reminderAdapter == null) { reminderAdapter = new ReminderAdapter(reminders, reminder -> { dbHelper.deleteReminder(reminder.id); loadReminders(); }); rvReminders.setAdapter(reminderAdapter); }
+                  else reminderAdapter.updateData(reminders);
+              }
+              @Override
+              public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                  if (requestCode == PERMISSION_REQUEST_CODE) { boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED; if (granted) switchListening.setChecked(true); else Toast.makeText(this, "Microphone permission required", Toast.LENGTH_LONG).show(); }
+              }
+              @Override protected void onResume() { super.onResume(); loadReminders(); VoiceListenerService.setStatusCallback((status, lastCmd) -> runOnUiThread(() -> { if (status != null) tvStatus.setText(status); if (lastCmd != null) { tvLastCommand.setText("Last: " + lastCmd); loadReminders(); } })); }
+              @Override protected void onDestroy() { super.onDestroy(); VoiceListenerService.setStatusCallback(null); }
+          }
+          EOF
+
+      - name: Write layout files
+        run: |
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_dark">
+            <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:padding="16dp">
+              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Quiko" android:textColor="@color/accent" android:textSize="42sp" android:textStyle="bold" android:layout_marginTop="32dp"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Offline Voice Assistant" android:textColor="@color/text_secondary" android:textSize="14sp" android:layout_marginBottom="16dp"/>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="16dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                      <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Voice Listening" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
+                      <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchListening" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    </LinearLayout>
+                    <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/status_bg" android:gravity="center" android:padding="12dp" android:text="Toggle switch to start" android:textColor="@color/accent" android:textSize="14sp"/>
+                    <TextView android:id="@+id/tvLastCommand" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Last: none" android:textColor="@color/text_secondary" android:textSize="13sp" android:gravity="center"/>
+                  </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="16dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Example Commands" android:textColor="@color/text_primary" android:textSize="15sp" android:textStyle="bold" android:paddingBottom="10dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, set alarm at 7 AM" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, alarm in 30 minutes" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, turn on flashlight" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, remind me to take medicine at 8 PM" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, what time is it" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+                  </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="80dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="16dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Reminders" android:textColor="@color/text_primary" android:textSize="15sp" android:textStyle="bold" android:paddingBottom="8dp"/>
+                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvReminders" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+                  </LinearLayout>
+                </androidx.cardview.widget.CardView>
+              </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+            <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/fabClear" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom|end" android:layout_margin="16dp" android:src="@android:drawable/ic_menu_delete" android:contentDescription="Clear" app:backgroundTint="@color/accent" app:tint="@android:color/white"/>
+          </androidx.coordinatorlayout.widget.CoordinatorLayout>
+          EOF
+
+          cat > app/src/main/res/layout/item_reminder.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="8dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+              <TextView android:id="@+id/tvTask" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/text_primary" android:textSize="14sp" android:textStyle="bold"/>
+              <TextView android:id="@+id/tvTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/accent" android:textSize="12sp" android:paddingTop="2dp"/>
+            </LinearLayout>
+            <ImageButton android:id="@+id/btnDelete" android:layout_width="36dp" android:layout_height="36dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_close_clear_cancel" android:contentDescription="Delete" android:tint="@color/text_secondary"/>
+          </LinearLayout>
+          EOF
+
+      - name: Write resource files
+        run: |
+          cat > app/src/main/res/values/colors.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <color name="bg_dark">#0D1117</color>
+            <color name="card_bg">#161B22</color>
+            <color name="accent">#58A6FF</color>
+            <color name="text_primary">#E6EDF3</color>
+            <color name="text_secondary">#8B949E</color>
+            <color name="colorPrimary">#58A6FF</color>
+            <color name="colorPrimaryDark">#0D1117</color>
+            <color name="colorAccent">#58A6FF</color>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <string name="app_name">Quiko</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <style name="Theme.QuikoApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+              <item name="colorPrimary">@color/colorPrimary</item>
+              <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+              <item name="colorAccent">@color/colorAccent</item>
+              <item name="android:windowBackground">@color/bg_dark</item>
+              <item name="android:statusBarColor">@color/bg_dark</item>
+              <item name="android:navigationBarColor">@color/bg_dark</item>
+            </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/drawable/status_bg.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <solid android:color="#1A2332"/>
+            <corners android:radius="10dp"/>
+            <stroke android:width="1dp" android:color="#2D4263"/>
+          </shape>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_quiko.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+            <path android:fillColor="#0D1117" android:pathData="M0,0 L108,0 L108,108 L0,108 Z"/>
+            <path android:fillColor="#58A6FF" android:pathData="M60,22 L42,52 L52,52 L48,86 L66,56 L56,56 Z"/>
+          </vector>
+          EOF
+
+      - name: Write local.properties
+        run: echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.2"
+
+      - name: Generate Gradle wrapper
+        run: gradle wrapper
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: quiko-app
+          path: app/build/outputs/apk/debug/app-debug.apk
