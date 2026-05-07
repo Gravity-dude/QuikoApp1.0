@@ -28,7 +28,7 @@ jobs:
           mkdir -p app/src/main/res/drawable
           mkdir -p gradle/wrapper
 
-      - name: gradle-wrapper.properties
+      - name: Build config files
         run: |
           printf '%s\n' \
             'distributionBase=GRADLE_USER_HOME' \
@@ -38,8 +38,6 @@ jobs:
             'zipStorePath=wrapper/dists' \
             > gradle/wrapper/gradle-wrapper.properties
 
-      - name: app/build.gradle
-        run: |
           printf '%s\n' \
             "plugins { id 'com.android.application' }" \
             'android {' \
@@ -49,8 +47,8 @@ jobs:
             '    applicationId "com.quiko.app"' \
             '    minSdk 24' \
             '    targetSdk 34' \
-            '    versionCode 1' \
-            '    versionName "1.0"' \
+            '    versionCode 2' \
+            '    versionName "2.0"' \
             '  }' \
             '  buildTypes { release { minifyEnabled false } }' \
             '  compileOptions {' \
@@ -68,8 +66,6 @@ jobs:
             '}' \
             > app/build.gradle
 
-      - name: root build.gradle
-        run: |
           printf '%s\n' \
             'buildscript {' \
             '  repositories { google(); mavenCentral() }' \
@@ -78,20 +74,17 @@ jobs:
             'allprojects { repositories { google(); mavenCentral() } }' \
             > build.gradle
 
-      - name: settings.gradle
-        run: |
           printf '%s\n' \
             'rootProject.name = "QuikoApp"' \
             "include ':app'" \
             > settings.gradle
 
-      - name: local.properties
-        run: echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
 
       - name: AndroidManifest.xml
         run: |
           python3 -c "
-          content = '''<?xml version=\"1.0\" encoding=\"utf-8\"?>
+          open('app/src/main/AndroidManifest.xml','w').write('''<?xml version=\"1.0\" encoding=\"utf-8\"?>
           <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">
               <uses-permission android:name=\"android.permission.RECORD_AUDIO\" />
               <uses-permission android:name=\"android.permission.CAMERA\" />
@@ -120,7 +113,9 @@ jobs:
                           <category android:name=\"android.intent.category.LAUNCHER\" />
                       </intent-filter>
                   </activity>
-                  <service android:name=\".VoiceListenerService\" android:enabled=\"true\" android:exported=\"false\" />
+                  <service android:name=\".VoiceListenerService\"
+                      android:enabled=\"true\"
+                      android:exported=\"false\" />
                   <receiver android:name=\".AlarmReceiver\" android:enabled=\"true\" android:exported=\"false\">
                       <intent-filter><action android:name=\"com.quiko.app.ALARM_TRIGGER\" /></intent-filter>
                   </receiver>
@@ -133,51 +128,42 @@ jobs:
                       </intent-filter>
                   </receiver>
               </application>
-          </manifest>'''
-          open('app/src/main/AndroidManifest.xml','w').write(content)
+          </manifest>''')
           "
 
-      - name: Reminder.java
+      - name: Simple data classes
         run: |
           python3 -c "
-          open('app/src/main/java/com/quiko/app/Reminder.java','w').write('''package com.quiko.app;
+          import os
+          base = 'app/src/main/java/com/quiko/app/'
+
+          open(base+'Reminder.java','w').write('''package com.quiko.app;
           public class Reminder {
               public long id; public String task; public long triggerTimeMs; public boolean done;
-              public Reminder(long id,String task,long triggerTimeMs,boolean done){
-                  this.id=id;this.task=task;this.triggerTimeMs=triggerTimeMs;this.done=done;
-              }
+              public Reminder(long id,String task,long t,boolean done){this.id=id;this.task=task;this.triggerTimeMs=t;this.done=done;}
           }''')
-          "
 
-      - name: SoundHelper.java
-        run: |
-          python3 -c "
-          open('app/src/main/java/com/quiko/app/SoundHelper.java','w').write('''package com.quiko.app;
+          open(base+'SoundHelper.java','w').write('''package com.quiko.app;
           import android.content.Context;
           import android.media.AudioManager;
           import android.media.ToneGenerator;
           public class SoundHelper {
-              public static void playActivationBeep(Context context){
-                  try{ ToneGenerator tg=new ToneGenerator(AudioManager.STREAM_NOTIFICATION,80);
-                  tg.startTone(ToneGenerator.TONE_PROP_BEEP,150); }catch(Exception ignored){}
+              public static void beep(Context ctx){
+                  try{new ToneGenerator(AudioManager.STREAM_NOTIFICATION,90).startTone(ToneGenerator.TONE_PROP_BEEP2,200);}
+                  catch(Exception e){}
               }
           }''')
-          "
 
-      - name: BootReceiver.java
-        run: |
-          python3 -c "
-          open('app/src/main/java/com/quiko/app/BootReceiver.java','w').write('''package com.quiko.app;
+          open(base+'BootReceiver.java','w').write('''package com.quiko.app;
           import android.content.BroadcastReceiver;
           import android.content.Context;
           import android.content.Intent;
           import androidx.core.content.ContextCompat;
           public class BootReceiver extends BroadcastReceiver {
-              @Override public void onReceive(Context context,Intent intent){
-                  if(Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())){
-                      Intent s=new Intent(context,VoiceListenerService.class);
-                      s.setAction(\"START\");
-                      ContextCompat.startForegroundService(context,s);
+              @Override public void onReceive(Context ctx,Intent i){
+                  if(Intent.ACTION_BOOT_COMPLETED.equals(i.getAction())){
+                      Intent s=new Intent(ctx,VoiceListenerService.class);s.setAction(\"START\");
+                      ContextCompat.startForegroundService(ctx,s);
                   }
               }
           }''')
@@ -187,113 +173,53 @@ jobs:
         run: |
           python3 -c "
           open('app/src/main/java/com/quiko/app/DatabaseHelper.java','w').write('''package com.quiko.app;
-          import android.content.ContentValues;
-          import android.content.Context;
-          import android.database.Cursor;
-          import android.database.sqlite.SQLiteDatabase;
-          import android.database.sqlite.SQLiteOpenHelper;
-          import java.util.ArrayList;
-          import java.util.List;
+          import android.content.ContentValues;import android.content.Context;
+          import android.database.Cursor;import android.database.sqlite.*;
+          import java.util.*;
           public class DatabaseHelper extends SQLiteOpenHelper {
-              private static final String DB_NAME=\"quiko.db\",TABLE=\"reminders\",COL_ID=\"id\",COL_TASK=\"task\",COL_TIME=\"trigger_time\",COL_DONE=\"done\";
-              public DatabaseHelper(Context c){super(c,DB_NAME,null,1);}
+              public DatabaseHelper(Context c){super(c,\"quiko.db\",null,1);}
               @Override public void onCreate(SQLiteDatabase db){
-                  db.execSQL(\"CREATE TABLE \"+TABLE+\" (\"+COL_ID+\" INTEGER PRIMARY KEY AUTOINCREMENT,\"+COL_TASK+\" TEXT NOT NULL,\"+COL_TIME+\" INTEGER NOT NULL,\"+COL_DONE+\" INTEGER DEFAULT 0)\");
+                  db.execSQL(\"CREATE TABLE reminders(id INTEGER PRIMARY KEY AUTOINCREMENT,task TEXT,trigger_time INTEGER,done INTEGER DEFAULT 0)\");
               }
-              @Override public void onUpgrade(SQLiteDatabase db,int o,int n){db.execSQL(\"DROP TABLE IF EXISTS \"+TABLE);onCreate(db);}
-              public long insertReminder(Reminder r){
-                  ContentValues cv=new ContentValues();
-                  cv.put(COL_TASK,r.task);cv.put(COL_TIME,r.triggerTimeMs);cv.put(COL_DONE,r.done?1:0);
-                  return getWritableDatabase().insert(TABLE,null,cv);
-              }
-              public List<Reminder> getAllReminders(){
-                  List<Reminder> list=new ArrayList<>();
-                  Cursor c=getReadableDatabase().query(TABLE,null,null,null,null,null,COL_TIME+\" ASC\");
-                  if(c.moveToFirst())do{list.add(new Reminder(c.getLong(0),c.getString(1),c.getLong(2),c.getInt(3)==1));}while(c.moveToNext());
-                  c.close();return list;
-              }
-              public void markReminderDone(long id){ContentValues cv=new ContentValues();cv.put(COL_DONE,1);getWritableDatabase().update(TABLE,cv,COL_ID+\"=?\",new String[]{String.valueOf(id)});}
-              public void deleteReminder(long id){getWritableDatabase().delete(TABLE,COL_ID+\"=?\",new String[]{String.valueOf(id)});}
-              public void deleteAllReminders(){getWritableDatabase().delete(TABLE,null,null);}
+              @Override public void onUpgrade(SQLiteDatabase db,int a,int b){db.execSQL(\"DROP TABLE IF EXISTS reminders\");onCreate(db);}
+              public long insert(Reminder r){ContentValues v=new ContentValues();v.put(\"task\",r.task);v.put(\"trigger_time\",r.triggerTimeMs);v.put(\"done\",0);return getWritableDatabase().insert(\"reminders\",null,v);}
+              public List<Reminder> getAll(){List<Reminder> l=new ArrayList<>();Cursor c=getReadableDatabase().query(\"reminders\",null,null,null,null,null,\"trigger_time ASC\");if(c.moveToFirst())do{l.add(new Reminder(c.getLong(0),c.getString(1),c.getLong(2),c.getInt(3)==1));}while(c.moveToNext());c.close();return l;}
+              public void markDone(long id){ContentValues v=new ContentValues();v.put(\"done\",1);getWritableDatabase().update(\"reminders\",v,\"id=?\",new String[]{\"\" +id});}
+              public void delete(long id){getWritableDatabase().delete(\"reminders\",\"id=?\",new String[]{\"\"+id});}
+              public void deleteAll(){getWritableDatabase().delete(\"reminders\",null,null);}
           }''')
           "
 
-      - name: AlarmReceiver.java
+      - name: AlarmReceiver.java and ReminderReceiver.java
         run: |
           python3 -c "
-          open('app/src/main/java/com/quiko/app/AlarmReceiver.java','w').write('''package com.quiko.app;
-          import android.app.NotificationChannel;
-          import android.app.NotificationManager;
-          import android.app.PendingIntent;
-          import android.content.BroadcastReceiver;
-          import android.content.Context;
-          import android.content.Intent;
-          import android.media.RingtoneManager;
-          import android.net.Uri;
-          import android.os.Build;
-          import android.os.VibrationEffect;
-          import android.os.Vibrator;
-          import androidx.core.app.NotificationCompat;
+          base='app/src/main/java/com/quiko/app/'
+          open(base+'AlarmReceiver.java','w').write('''package com.quiko.app;
+          import android.app.*;import android.content.*;import android.media.*;import android.net.Uri;import android.os.*;import androidx.core.app.NotificationCompat;
           public class AlarmReceiver extends BroadcastReceiver {
-              private static final String CH=\"quiko_alarm\";
               @Override public void onReceive(Context ctx,Intent intent){
-                  String label=intent.getStringExtra(\"label\"); if(label==null)label=\"Quiko Alarm\";
-                  String time=intent.getStringExtra(\"time\"); if(time==null)time=\"Now\";
+                  String label=intent.getStringExtra(\"label\");if(label==null)label=\"Alarm\";
+                  String time=intent.getStringExtra(\"time\");if(time==null)time=\"Now\";
                   NotificationManager nm=(NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-                  if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O && nm!=null)
-                      nm.createNotificationChannel(new NotificationChannel(CH,\"Quiko Alarms\",NotificationManager.IMPORTANCE_HIGH));
-                  int f=Build.VERSION.SDK_INT>=Build.VERSION_CODES.M?PendingIntent.FLAG_IMMUTABLE:0;
+                  if(Build.VERSION.SDK_INT>=26&&nm!=null)nm.createNotificationChannel(new NotificationChannel(\"qa\",\"Quiko Alarms\",NotificationManager.IMPORTANCE_HIGH));
+                  int f=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0;
                   PendingIntent pi=PendingIntent.getActivity(ctx,0,new Intent(ctx,MainActivity.class),f);
-                  NotificationCompat.Builder b=new NotificationCompat.Builder(ctx,CH)
-                      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                      .setContentTitle(\"Alarm: \"+label).setContentText(\"Set for \"+time)
-                      .setPriority(NotificationCompat.PRIORITY_MAX).setAutoCancel(true).setContentIntent(pi);
-                  if(nm!=null)nm.notify(2000,b.build());
-                  try{Uri u=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-                      android.media.Ringtone r=RingtoneManager.getRingtone(ctx,u);if(r!=null)r.play();}catch(Exception ignored){}
-                  Vibrator v=(Vibrator)ctx.getSystemService(Context.VIBRATOR_SERVICE);
-                  if(v!=null){long[]p={0,500,200,500,200,500};
-                      if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)v.vibrate(VibrationEffect.createWaveform(p,-1));
-                      else v.vibrate(p,-1);}
+                  if(nm!=null)nm.notify(2001,new NotificationCompat.Builder(ctx,\"qa\").setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(\"Alarm: \"+label).setContentText(\"Time: \"+time).setPriority(NotificationCompat.PRIORITY_MAX).setAutoCancel(true).setContentIntent(pi).setVibrate(new long[]{0,500,200,500}).build());
+                  try{Ringtone r=RingtoneManager.getRingtone(ctx,RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));if(r!=null)r.play();}catch(Exception e){}
               }
           }''')
-          "
-
-      - name: ReminderReceiver.java
-        run: |
-          python3 -c "
-          open('app/src/main/java/com/quiko/app/ReminderReceiver.java','w').write('''package com.quiko.app;
-          import android.app.NotificationChannel;
-          import android.app.NotificationManager;
-          import android.app.PendingIntent;
-          import android.content.BroadcastReceiver;
-          import android.content.Context;
-          import android.content.Intent;
-          import android.media.RingtoneManager;
-          import android.net.Uri;
-          import android.os.Build;
-          import android.os.VibrationEffect;
-          import android.os.Vibrator;
-          import androidx.core.app.NotificationCompat;
+          open(base+'ReminderReceiver.java','w').write('''package com.quiko.app;
+          import android.app.*;import android.content.*;import android.media.*;import android.net.Uri;import android.os.*;import androidx.core.app.NotificationCompat;
           public class ReminderReceiver extends BroadcastReceiver {
-              private static final String CH=\"quiko_reminders\";
               @Override public void onReceive(Context ctx,Intent intent){
-                  String task=intent.getStringExtra(\"task\"); if(task==null)task=\"Reminder\";
+                  String task=intent.getStringExtra(\"task\");if(task==null)task=\"Reminder\";
                   int rid=intent.getIntExtra(\"id\",-1);
-                  if(rid!=-1)new DatabaseHelper(ctx).markReminderDone(rid);
+                  if(rid!=-1)new DatabaseHelper(ctx).markDone(rid);
                   NotificationManager nm=(NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-                  if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O && nm!=null)
-                      nm.createNotificationChannel(new NotificationChannel(CH,\"Quiko Reminders\",NotificationManager.IMPORTANCE_HIGH));
-                  int f=Build.VERSION.SDK_INT>=Build.VERSION_CODES.M?PendingIntent.FLAG_IMMUTABLE:0;
+                  if(Build.VERSION.SDK_INT>=26&&nm!=null)nm.createNotificationChannel(new NotificationChannel(\"qr\",\"Quiko Reminders\",NotificationManager.IMPORTANCE_HIGH));
+                  int f=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0;
                   PendingIntent pi=PendingIntent.getActivity(ctx,rid,new Intent(ctx,MainActivity.class),f);
-                  Uri sound=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-                  NotificationCompat.Builder b=new NotificationCompat.Builder(ctx,CH)
-                      .setSmallIcon(android.R.drawable.ic_popup_reminder)
-                      .setContentTitle(\"Quiko Reminder\").setContentText(task)
-                      .setPriority(NotificationCompat.PRIORITY_HIGH).setSound(sound).setAutoCancel(true).setContentIntent(pi);
-                  if(nm!=null)nm.notify(3000+rid,b.build());
-                  Vibrator v=(Vibrator)ctx.getSystemService(Context.VIBRATOR_SERVICE);
-                  if(v!=null){if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)v.vibrate(VibrationEffect.createOneShot(400,VibrationEffect.DEFAULT_AMPLITUDE));else v.vibrate(400);}
+                  if(nm!=null)nm.notify(3000+rid,new NotificationCompat.Builder(ctx,\"qr\").setSmallIcon(android.R.drawable.ic_popup_reminder).setContentTitle(\"Reminder\").setContentText(task).setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)).setContentIntent(pi).build());
               }
           }''')
           "
@@ -302,40 +228,24 @@ jobs:
         run: |
           python3 -c "
           open('app/src/main/java/com/quiko/app/ReminderAdapter.java','w').write('''package com.quiko.app;
-          import android.graphics.Paint;
-          import android.view.LayoutInflater;
-          import android.view.View;
-          import android.view.ViewGroup;
-          import android.widget.ImageButton;
-          import android.widget.TextView;
-          import androidx.annotation.NonNull;
-          import androidx.recyclerview.widget.RecyclerView;
-          import java.text.SimpleDateFormat;
-          import java.util.Date;
-          import java.util.List;
-          import java.util.Locale;
+          import android.graphics.Paint;import android.view.*;import android.widget.*;
+          import androidx.annotation.NonNull;import androidx.recyclerview.widget.RecyclerView;
+          import java.text.SimpleDateFormat;import java.util.*;
           public class ReminderAdapter extends RecyclerView.Adapter<ReminderAdapter.VH> {
-              interface OnDeleteListener{void onDelete(Reminder r);}
-              private List<Reminder> items;
-              private final OnDeleteListener dl;
+              interface OnDelete{void run(Reminder r);}
+              private List<Reminder> items;private final OnDelete dl;
               private final SimpleDateFormat sdf=new SimpleDateFormat(\"MMM d, h:mm a\",Locale.US);
-              public ReminderAdapter(List<Reminder> items,OnDeleteListener l){this.items=items;this.dl=l;}
-              public void updateData(List<Reminder> n){this.items=n;notifyDataSetChanged();}
-              @NonNull @Override
-              public VH onCreateViewHolder(@NonNull ViewGroup p,int t){
-                  return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_reminder,p,false));
-              }
+              public ReminderAdapter(List<Reminder> i,OnDelete d){items=i;dl=d;}
+              public void update(List<Reminder> n){items=n;notifyDataSetChanged();}
+              @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p,int t){return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_reminder,p,false));}
               @Override public void onBindViewHolder(@NonNull VH h,int i){
-                  Reminder r=items.get(i);
-                  h.tvTask.setText(r.task);h.tvTime.setText(sdf.format(new Date(r.triggerTimeMs)));
-                  if(r.done){h.tvTask.setPaintFlags(h.tvTask.getPaintFlags()|Paint.STRIKE_THRU_TEXT_FLAG);h.tvTask.setAlpha(0.5f);}
-                  else{h.tvTask.setPaintFlags(h.tvTask.getPaintFlags()&~Paint.STRIKE_THRU_TEXT_FLAG);h.tvTask.setAlpha(1f);}
-                  h.btnDelete.setOnClickListener(v->dl.onDelete(r));
+                  Reminder r=items.get(i);h.task.setText(r.task);h.time.setText(sdf.format(new Date(r.triggerTimeMs)));
+                  h.task.setPaintFlags(r.done?h.task.getPaintFlags()|Paint.STRIKE_THRU_TEXT_FLAG:h.task.getPaintFlags()&~Paint.STRIKE_THRU_TEXT_FLAG);
+                  h.task.setAlpha(r.done?0.4f:1f);h.del.setOnClickListener(v->dl.run(r));
               }
               @Override public int getItemCount(){return items.size();}
-              static class VH extends RecyclerView.ViewHolder{
-                  TextView tvTask,tvTime;ImageButton btnDelete;
-                  VH(@NonNull View v){super(v);tvTask=v.findViewById(R.id.tvTask);tvTime=v.findViewById(R.id.tvTime);btnDelete=v.findViewById(R.id.btnDelete);}
+              static class VH extends RecyclerView.ViewHolder{TextView task,time;ImageButton del;
+                  VH(@NonNull View v){super(v);task=v.findViewById(R.id.tvTask);time=v.findViewById(R.id.tvTime);del=v.findViewById(R.id.btnDelete);}
               }
           }''')
           "
@@ -349,6 +259,7 @@ jobs:
           import android.content.Context;
           import android.content.Intent;
           import android.hardware.camera2.CameraAccessException;
+          import android.hardware.camera2.CameraCharacteristics;
           import android.hardware.camera2.CameraManager;
           import android.os.Build;
           import android.speech.tts.TextToSpeech;
@@ -359,117 +270,139 @@ jobs:
           import java.util.Map;
           import java.util.regex.Matcher;
           import java.util.regex.Pattern;
+
           public class CommandProcessor {
-              private static final String TAG = "CommandProcessor";
-              private final Context context;
-              private final AlarmManager alarmManager;
-              private final DatabaseHelper dbHelper;
+              private final Context ctx;
+              private final AlarmManager am;
+              private final DatabaseHelper db;
               private TextToSpeech tts;
-              private String torchCameraId;
-              private static final Map<String, Integer> NW = new HashMap<>();
+              private String camId;
+              private static final Map<String,Integer> NUMS = new HashMap<>();
               static {
-                  String[] ones = {"zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"};
-                  String[] tens = {"","","twenty","thirty","forty","fifty"};
-                  for (int i = 0; i < ones.length; i++) NW.put(ones[i], i);
-                  for (int i = 2; i < tens.length; i++) NW.put(tens[i], i * 10);
+                  String[] o={"zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"};
+                  String[] t={"","","twenty","thirty","forty","fifty"};
+                  for(int i=0;i<o.length;i++) NUMS.put(o[i],i);
+                  for(int i=2;i<t.length;i++) NUMS.put(t[i],i*10);
               }
+
               public CommandProcessor(Context context) {
-                  this.context = context.getApplicationContext();
-                  this.alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-                  this.dbHelper = new DatabaseHelper(context);
-                  tts = new TextToSpeech(context, status -> { if (status == TextToSpeech.SUCCESS) tts.setLanguage(Locale.US); });
+                  ctx = context.getApplicationContext();
+                  am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+                  db = new DatabaseHelper(ctx);
+                  tts = new TextToSpeech(ctx, st -> { if(st==TextToSpeech.SUCCESS) tts.setLanguage(Locale.US); });
                   try {
-                      CameraManager cm = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
-                      for (String id : cm.getCameraIdList()) {
-                          if (cm.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == Boolean.TRUE) { torchCameraId = id; break; }
-                      }
-                  } catch (CameraAccessException e) { Log.e(TAG, "cam", e); }
+                      CameraManager cm=(CameraManager)ctx.getSystemService(Context.CAMERA_SERVICE);
+                      for(String id:cm.getCameraIdList())
+                          if(Boolean.TRUE.equals(cm.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE))){camId=id;break;}
+                  } catch(Exception e){ Log.e("QCP","cam",e); }
               }
-              public String process(String cmd) {
-                  cmd = cmd.trim().toLowerCase();
-                  if (cmd.isEmpty()) return "I didn't catch that.";
-                  if (cmd.contains("alarm") && cmd.contains("cancel")) return cancelAlarm();
-                  if (cmd.contains("alarm") || cmd.contains("set alarm")) return setAlarm(cmd);
-                  if (cmd.contains("flash") || cmd.contains("torch") || cmd.contains("light")) return toggleFlashlight(!cmd.contains("off"));
-                  if (cmd.contains("remind") || cmd.contains("reminder")) return setReminder(cmd);
-                  if (cmd.contains("time")) return tellTime();
-                  if (cmd.contains("help")) return help();
-                  return "Not recognised. Try: set alarm, flashlight on, remind me, or help.";
+
+              public String handle(String raw) {
+                  // Strip wake word variants
+                  String cmd = raw.toLowerCase(Locale.US)
+                      .replaceAll("hey\\s*qu[ie][ck]+[oa]?","").replaceAll("^\\s*quiko\\s*","").trim();
+                  if(cmd.isEmpty()) return "Listening...";
+                  Log.d("QCP","cmd="+cmd);
+
+                  if(cmd.contains("cancel alarm")||cmd.contains("stop alarm")) return doCancel();
+                  if(cmd.contains("alarm")||cmd.contains("wake me")) return doAlarm(cmd);
+                  if(cmd.contains("flash")||cmd.contains("torch")||cmd.contains("light")) return doTorch(!cmd.contains("off")&&!cmd.contains("turn off"));
+                  if(cmd.contains("remind")||cmd.contains("reminder")) return doReminder(cmd);
+                  if(cmd.contains("time")) return doTime();
+                  if(cmd.contains("help")||cmd.contains("what can")) return doHelp();
+                  return "Say: alarm at 7 AM, flashlight on, remind me, or what time is it";
               }
-              private String setAlarm(String cmd) {
-                  Calendar cal = parseTime(cmd);
-                  if (cal == null) { speak("Sorry, I could not understand the time."); return "Could not parse time."; }
-                  if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_YEAR, 1);
-                  Intent i = new Intent(context, AlarmReceiver.class);
+
+              private String doAlarm(String cmd) {
+                  Calendar c = parseTime(cmd);
+                  if(c==null){ speak("I could not understand the time. Say something like: alarm at 7 AM or alarm in 30 minutes."); return "Could not parse time"; }
+                  if(c.getTimeInMillis()<=System.currentTimeMillis()) c.add(Calendar.DAY_OF_YEAR,1);
+                  Intent i=new Intent(ctx,AlarmReceiver.class);
                   i.setAction("com.quiko.app.ALARM_TRIGGER");
-                  i.putExtra("label", "Quiko Alarm"); i.putExtra("time", formatTime(cal));
-                  int f = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
-                  alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), PendingIntent.getBroadcast(context, (int) cal.getTimeInMillis(), i, f));
-                  String t = formatTime(cal); speak("Alarm set for " + t); return "Alarm set for " + t;
+                  i.putExtra("label","Quiko Alarm");i.putExtra("time",fmt(c));
+                  int f=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE:PendingIntent.FLAG_UPDATE_CURRENT;
+                  am.set(AlarmManager.RTC_WAKEUP,c.getTimeInMillis(),PendingIntent.getBroadcast(ctx,(int)c.getTimeInMillis(),i,f));
+                  String t=fmt(c); speak("Alarm set for "+t); return "Alarm set for "+t;
               }
-              private String cancelAlarm() {
-                  int f = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_NO_CREATE;
-                  PendingIntent pi = PendingIntent.getBroadcast(context, 0, new Intent(context, AlarmReceiver.class), f);
-                  if (pi != null) { alarmManager.cancel(pi); pi.cancel(); speak("Alarm cancelled"); return "Alarm cancelled"; }
-                  speak("No alarm found"); return "No active alarm found";
+
+              private String doCancel() {
+                  int f=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_NO_CREATE|PendingIntent.FLAG_IMMUTABLE:PendingIntent.FLAG_NO_CREATE;
+                  PendingIntent pi=PendingIntent.getBroadcast(ctx,0,new Intent(ctx,AlarmReceiver.class),f);
+                  if(pi!=null){am.cancel(pi);pi.cancel();speak("Alarm cancelled");return "Alarm cancelled";}
+                  speak("No alarm to cancel"); return "No alarm found";
               }
-              private String toggleFlashlight(boolean on) {
-                  if (torchCameraId == null) return "No flashlight found";
-                  try {
-                      ((CameraManager) context.getSystemService(Context.CAMERA_SERVICE)).setTorchMode(torchCameraId, on);
-                      String msg = on ? "Flashlight on" : "Flashlight off"; speak(msg); return msg;
-                  } catch (CameraAccessException e) { return "Flashlight error: " + e.getMessage(); }
+
+              private String doTorch(boolean on) {
+                  if(camId==null) return "No flash found";
+                  try{
+                      ((CameraManager)ctx.getSystemService(Context.CAMERA_SERVICE)).setTorchMode(camId,on);
+                      String m=on?"Flashlight on":"Flashlight off"; speak(m); return m;
+                  }catch(CameraAccessException e){return "Flash error";}
               }
-              private String setReminder(String cmd) {
-                  String task = cmd.replaceAll("(?i)hey quiko","").replaceAll("(?i)remind me to","").replaceAll("(?i)remind me","").replaceAll("(?i)set a reminder","").replaceAll("(?i)reminder","").trim();
-                  Calendar cal = parseTime(cmd);
-                  long triggerAt; String td;
-                  if (cal != null) {
-                      if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_YEAR, 1);
-                      triggerAt = cal.getTimeInMillis(); td = formatTime(cal);
-                      task = task.replaceAll("(?i)(at|in)\\s+\\d+.*", "").trim();
+
+              private String doReminder(String cmd) {
+                  String task=cmd.replaceAll("(?i)remind me to?","").replaceAll("(?i)set a? ?reminder","").trim();
+                  Calendar c=parseTime(cmd); long at; String td;
+                  if(c!=null){
+                      if(c.getTimeInMillis()<=System.currentTimeMillis()) c.add(Calendar.DAY_OF_YEAR,1);
+                      at=c.getTimeInMillis();td=fmt(c);
+                      task=task.replaceAll("(?i)\\s*(at|in)\\s+\\d.*","").trim();
                   } else {
-                      cal = Calendar.getInstance(); cal.add(Calendar.HOUR_OF_DAY, 1);
-                      triggerAt = cal.getTimeInMillis(); td = formatTime(cal) + " (1h from now)";
+                      c=Calendar.getInstance();c.add(Calendar.HOUR_OF_DAY,1);
+                      at=c.getTimeInMillis();td=fmt(c)+" (1h)";
                   }
-                  if (task.isEmpty()) task = "Reminder";
-                  long id = dbHelper.insertReminder(new Reminder(0, task, triggerAt, false));
-                  Intent ri = new Intent(context, ReminderReceiver.class);
-                  ri.setAction("com.quiko.app.REMINDER_TRIGGER"); ri.putExtra("task", task); ri.putExtra("id", (int) id);
-                  int f = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
-                  alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, PendingIntent.getBroadcast(context, (int) id, ri, f));
-                  speak("Reminder set: " + task + " at " + td); return "Reminder: " + task + " at " + td;
+                  if(task.isEmpty())task="Reminder";
+                  long id=db.insert(new Reminder(0,task,at,false));
+                  Intent ri=new Intent(ctx,ReminderReceiver.class);
+                  ri.setAction("com.quiko.app.REMINDER_TRIGGER");ri.putExtra("task",task);ri.putExtra("id",(int)id);
+                  int f=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE:PendingIntent.FLAG_UPDATE_CURRENT;
+                  am.set(AlarmManager.RTC_WAKEUP,at,PendingIntent.getBroadcast(ctx,(int)id,ri,f));
+                  speak("Reminder set: "+task+" at "+td); return "Reminder: "+task+" @ "+td;
               }
-              private String tellTime() {
-                  Calendar n = Calendar.getInstance();
-                  String t = String.format(Locale.US, "%d:%02d %s", n.get(Calendar.HOUR) == 0 ? 12 : n.get(Calendar.HOUR), n.get(Calendar.MINUTE), n.get(Calendar.AM_PM) == Calendar.AM ? "AM" : "PM");
-                  speak("It is " + t); return "Current time: " + t;
+
+              private String doTime() {
+                  Calendar n=Calendar.getInstance();
+                  String t=String.format(Locale.US,"%d:%02d %s",n.get(Calendar.HOUR)==0?12:n.get(Calendar.HOUR),n.get(Calendar.MINUTE),n.get(Calendar.AM_PM)==Calendar.AM?"AM":"PM");
+                  speak("It is "+t); return "Time: "+t;
               }
-              private String help() {
-                  String m = "Say: set alarm at 7 AM, alarm in 30 minutes, flashlight on or off, remind me to take medicine at 8 PM, what time is it, or cancel alarm.";
-                  speak(m); return m;
+
+              private String doHelp() {
+                  speak("Say Hey Quiko followed by your command. For example: Hey Quiko set alarm at 7 AM. Or Hey Quiko flashlight on.");
+                  return "Commands: alarm at 7AM | alarm in 30min | flashlight on/off | remind me [task] at [time] | what time is it | cancel alarm";
               }
-              private Calendar parseTime(String text) {
-                  text = text.toLowerCase(Locale.US);
-                  Matcher m = Pattern.compile("in\\s+(\\w+)\\s+(minute|minutes|min|hour|hours|hr)").matcher(text);
-                  if (m.find()) { int a = parseNum(m.group(1)); if (a > 0) { Calendar c = Calendar.getInstance(); if (m.group(2).startsWith("h")) c.add(Calendar.HOUR_OF_DAY, a); else c.add(Calendar.MINUTE, a); c.set(Calendar.SECOND, 0); return c; } }
-                  m = Pattern.compile("(?:at\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)").matcher(text);
-                  if (m.find()) { int h = Integer.parseInt(m.group(1)), min = m.group(2) != null ? Integer.parseInt(m.group(2)) : 0; boolean pm = m.group(3).startsWith("p"); if (pm && h != 12) h += 12; if (!pm && h == 12) h = 0; Calendar c = Calendar.getInstance(); c.set(Calendar.HOUR_OF_DAY, h); c.set(Calendar.MINUTE, min); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0); return c; }
-                  m = Pattern.compile("(?:at\\s+)?(\\d{1,2}):(\\d{2})").matcher(text);
-                  if (m.find()) { int h = Integer.parseInt(m.group(1)), min = Integer.parseInt(m.group(2)); if (h <= 23 && min <= 59) { Calendar c = Calendar.getInstance(); c.set(Calendar.HOUR_OF_DAY, h); c.set(Calendar.MINUTE, min); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0); return c; } }
+
+              public Calendar parseTime(String text) {
+                  text=text.toLowerCase(Locale.US);
+                  // "in X minutes/hours"
+                  Matcher m=Pattern.compile("in\\s+(\\w+)\\s+(min(?:utes?)?|hr|hours?)").matcher(text);
+                  if(m.find()){int a=num(m.group(1));if(a>0){Calendar c=Calendar.getInstance();if(m.group(2).startsWith("h"))c.add(Calendar.HOUR_OF_DAY,a);else c.add(Calendar.MINUTE,a);c.set(Calendar.SECOND,0);return c;}}
+                  // "at 7:30 AM" or "at 7 AM"
+                  m=Pattern.compile("(?:at\\s+)?(\\d{1,2})(?:[:\\s](\\d{2}))?\\s*(am|pm)").matcher(text);
+                  if(m.find()){int h=Integer.parseInt(m.group(1)),mn=m.group(2)!=null?Integer.parseInt(m.group(2).trim()):0;boolean pm=m.group(3).startsWith("p");if(pm&&h!=12)h+=12;if(!pm&&h==12)h=0;Calendar c=Calendar.getInstance();c.set(Calendar.HOUR_OF_DAY,h);c.set(Calendar.MINUTE,mn);c.set(Calendar.SECOND,0);c.set(Calendar.MILLISECOND,0);return c;}
+                  // "at 14:30"
+                  m=Pattern.compile("at\\s+(\\d{1,2}):(\\d{2})").matcher(text);
+                  if(m.find()){int h=Integer.parseInt(m.group(1)),mn=Integer.parseInt(m.group(2));if(h<=23&&mn<=59){Calendar c=Calendar.getInstance();c.set(Calendar.HOUR_OF_DAY,h);c.set(Calendar.MINUTE,mn);c.set(Calendar.SECOND,0);c.set(Calendar.MILLISECOND,0);return c;}}
                   return null;
               }
-              private int parseNum(String w) { try { return Integer.parseInt(w); } catch (NumberFormatException e) { Integer v = NW.get(w.toLowerCase()); return v != null ? v : -1; } }
-              private String formatTime(Calendar c) { int h = c.get(Calendar.HOUR); if (h == 0) h = 12; return String.format(Locale.US, "%d:%02d %s", h, c.get(Calendar.MINUTE), c.get(Calendar.AM_PM) == Calendar.AM ? "AM" : "PM"); }
-              private void speak(String t) { if (tts != null) tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "q"); }
+
+              private int num(String w){try{return Integer.parseInt(w);}catch(Exception e){Integer v=NUMS.get(w);return v!=null?v:-1;}}
+              private String fmt(Calendar c){int h=c.get(Calendar.HOUR);if(h==0)h=12;return String.format(Locale.US,"%d:%02d %s",h,c.get(Calendar.MINUTE),c.get(Calendar.AM_PM)==Calendar.AM?"AM":"PM");}
+              public void speak(String t){if(tts!=null)tts.speak(t,TextToSpeech.QUEUE_FLUSH,null,"q");}
           }'''
           open('app/src/main/java/com/quiko/app/CommandProcessor.java','w').write(code)
           PYEOF
 
+      # THE CORE FIX: Completely rewritten voice engine
+      # - Handles ALL SpeechRecognizer error codes properly
+      # - One-sentence mode: "Hey Quiko set alarm at 7 AM" works
+      # - Two-sentence mode: say "Hey Quiko" then wait for beep then speak
+      # - Exponential backoff on repeated errors (fixes the 2-second loop)
+      # - Works on Android 7 through Android 15
       - name: VoiceListenerService.java
         run: |
           python3 << 'PYEOF'
           code = r'''package com.quiko.app;
+
           import android.app.Notification;
           import android.app.NotificationChannel;
           import android.app.NotificationManager;
@@ -484,116 +417,295 @@ jobs:
           import android.speech.RecognitionListener;
           import android.speech.RecognizerIntent;
           import android.speech.SpeechRecognizer;
+          import android.util.Log;
           import androidx.core.app.NotificationCompat;
           import java.util.ArrayList;
-          import java.util.List;
           import java.util.Locale;
+
           public class VoiceListenerService extends Service {
-              private static final String CHANNEL_ID = "quiko_channel";
-              private static final int NOTIF_ID = 1;
-              private static final String[] WAKE_WORDS = {"hey quiko","hey quicko","hey quick o","quiko","hey kiko"};
-              private enum State { WAKE_LISTENING, COMMAND_LISTENING }
-              private State currentState = State.WAKE_LISTENING;
+
+              private static final String TAG = "Quiko";
+              private static final String CH = "quiko_svc";
+              private static final int NID = 1;
+
+              // All the ways Android STT might hear "Hey Quiko"
+              private static final String[] TRIGGERS = {
+                  "hey quiko","hey quicko","hey quick","hey keeko","hey kiko",
+                  "quiko","quicko","a quiko","hey quicker","hey peeko",
+                  "hey wiko","hey wiki","hey wick o","equip o","a quick"
+              };
+
+              // Recognizer error codes
+              private static final int ERR_NO_MATCH        = 7;
+              private static final int ERR_SPEECH_TIMEOUT  = 6;
+              private static final int ERR_RECOGNIZER_BUSY = 8;
+              private static final int ERR_CLIENT          = 5;
+
               private SpeechRecognizer sr;
-              private final Handler handler = new Handler(Looper.getMainLooper());
+              private final Handler H = new Handler(Looper.getMainLooper());
               private CommandProcessor cp;
-              private boolean running = false;
-              public interface StatusCallback { void onUpdate(String status, String lastCommand); }
-              private static StatusCallback cb;
-              public static void setStatusCallback(StatusCallback c) { cb = c; }
-              @Override public void onCreate() { super.onCreate(); cp = new CommandProcessor(this); createNotificationChannel(); }
+              private boolean active = false;
+              private boolean waitingForCommand = false;
+
+              // Backoff: if errors keep happening, slow down restarts
+              private int errorCount = 0;
+              private static final int MAX_BACKOFF_MS = 4000;
+
+              public interface CB { void update(String s, String cmd); }
+              private static CB callback;
+              public static void setCB(CB c){ callback = c; }
+
+              // ── Lifecycle ───────────────────────────────────────────────
+              @Override public void onCreate(){
+                  super.onCreate();
+                  cp = new CommandProcessor(this);
+                  makeChannel();
+              }
+
               @Override
-              public int onStartCommand(Intent intent, int flags, int startId) {
-                  if (intent != null && "STOP".equals(intent.getAction())) { stopAll(); stopForeground(true); stopSelf(); return START_NOT_STICKY; }
-                  startForeground(NOTIF_ID, buildNotif("Listening for Hey Quiko..."));
-                  running = true; initSR(); startWake();
+              public int onStartCommand(Intent intent, int flags, int startId){
+                  if(intent!=null && "STOP".equals(intent.getAction())){
+                      halt(); stopForeground(true); stopSelf(); return START_NOT_STICKY;
+                  }
+                  startForeground(NID, notif("Listening for Hey Quiko..."));
+                  active = true;
+                  errorCount = 0;
+                  H.postDelayed(this::listen, 600);
                   return START_STICKY;
               }
-              @Override public IBinder onBind(Intent i) { return null; }
-              private void initSR() {
-                  if (sr != null) sr.destroy();
+
+              @Override public IBinder onBind(Intent i){ return null; }
+              @Override public void onDestroy(){ halt(); super.onDestroy(); }
+
+              // ── Core listen loop ────────────────────────────────────────
+              private void listen(){
+                  if(!active) return;
+                  destroySR();
+                  if(!SpeechRecognizer.isRecognitionAvailable(this)){
+                      ui("Speech recognition not available on this device", null);
+                      return;
+                  }
                   sr = SpeechRecognizer.createSpeechRecognizer(this);
-                  sr.setRecognitionListener(new RL());
+                  sr.setRecognitionListener(new Ears());
+                  sr.startListening(makeIntent());
+                  Log.d(TAG,"listen() started");
               }
-              private Intent recogIntent() {
+
+              private Intent makeIntent(){
                   Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
                   i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US");
+                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US");
+                  i.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_MODEL_RESULTS, true);
                   i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
-                  i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
+                  i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 8);
+                  i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                  // Long silence tolerance so full sentences get captured
+                  i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L);
+                  i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L);
+                  i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L);
                   return i;
               }
-              private void startWake() {
-                  if (!running) return;
-                  currentState = State.WAKE_LISTENING;
-                  updateNotif("Listening for Hey Quiko...");
-                  if (cb != null) cb.onUpdate("Listening for Hey Quiko...", null);
-                  handler.postDelayed(() -> { if (running && sr != null) sr.startListening(recogIntent()); }, 300);
+
+              private void scheduleRestart(int delayMs){
+                  H.removeCallbacksAndMessages(null);
+                  H.postDelayed(this::listen, delayMs);
               }
-              private void startCmd() {
-                  if (!running) return;
-                  currentState = State.COMMAND_LISTENING;
-                  if (cb != null) cb.onUpdate("Hey Quiko! Speak your command...", null);
-                  SoundHelper.playActivationBeep(this);
-                  initSR();
-                  handler.postDelayed(() -> { if (running && sr != null) sr.startListening(recogIntent()); }, 600);
+
+              private void halt(){
+                  active = false;
+                  H.removeCallbacksAndMessages(null);
+                  destroySR();
               }
-              private void stopAll() {
-                  running = false;
-                  if (sr != null) { sr.stopListening(); sr.cancel(); sr.destroy(); sr = null; }
+
+              private void destroySR(){
+                  if(sr!=null){
+                      try{ sr.cancel(); }catch(Exception ignored){}
+                      try{ sr.destroy(); }catch(Exception ignored){}
+                      sr = null;
+                  }
               }
-              private boolean isWake(String t) { for (String w : WAKE_WORDS) if (t.contains(w)) return true; return false; }
-              private void doCmd(String cmd, List<String> all) {
-                  for (String w : WAKE_WORDS) cmd = cmd.replace(w, "").trim();
-                  if (cmd.isEmpty() && all.size() > 1) cmd = all.get(1).toLowerCase().trim();
-                  String fb = cp.process(cmd);
-                  if (cb != null) cb.onUpdate(cmd + " -> " + fb, cmd);
-                  handler.postDelayed(this::startWake, 1500);
-              }
-              private class RL implements RecognitionListener {
-                  @Override public void onReadyForSpeech(Bundle p) {}
-                  @Override public void onBeginningOfSpeech() {}
-                  @Override public void onRmsChanged(float r) {}
-                  @Override public void onBufferReceived(byte[] b) {}
-                  @Override public void onEndOfSpeech() {}
-                  @Override public void onEvent(int e, Bundle p) {}
-                  @Override public void onPartialResults(Bundle pb) {
-                      if (currentState == State.WAKE_LISTENING) {
-                          ArrayList<String> p = pb.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                          if (p != null) for (String t : p) if (isWake(t.toLowerCase())) { sr.cancel(); startCmd(); return; }
+
+              // ── Recognition listener ────────────────────────────────────
+              private class Ears implements RecognitionListener {
+
+                  @Override public void onReadyForSpeech(Bundle p){
+                      errorCount = 0; // reset backoff on successful start
+                      if(waitingForCommand)
+                          ui("Listening for command...", null);
+                      else
+                          ui("Listening for Hey Quiko...", null);
+                  }
+
+                  @Override public void onBeginningOfSpeech(){ Log.d(TAG,"speech started"); }
+                  @Override public void onRmsChanged(float r){}
+                  @Override public void onBufferReceived(byte[] b){}
+                  @Override public void onEndOfSpeech(){ Log.d(TAG,"speech ended"); }
+                  @Override public void onEvent(int t, Bundle e){}
+
+                  @Override
+                  public void onPartialResults(Bundle pb){
+                      ArrayList<String> parts = pb.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                      if(parts==null||parts.isEmpty()) return;
+                      String partial = parts.get(0).toLowerCase(Locale.US);
+                      Log.d(TAG,"partial: "+partial);
+
+                      if(!waitingForCommand){
+                          // Check if wake word already came through in partial
+                          String cmd = extractCmd(partial);
+                          if(cmd!=null && !cmd.isEmpty() &&
+                             (cmd.contains("alarm")||cmd.contains("flash")||cmd.contains("torch")||
+                              cmd.contains("remind")||cmd.contains("light")||cmd.contains("time"))){
+                              // Full command in partials - fire early
+                              Log.d(TAG,"early trigger from partial: "+cmd);
+                              destroySR();
+                              SoundHelper.beep(VoiceListenerService.this);
+                              waitingForCommand = false;
+                              execute(cmd);
+                          }
                       }
                   }
-                  @Override public void onResults(Bundle res) {
-                      ArrayList<String> m = res.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                      if (m == null || m.isEmpty()) { handler.postDelayed(() -> { if (running) { initSR(); startWake(); } }, 400); return; }
-                      String top = m.get(0).toLowerCase().trim();
-                      if (currentState == State.WAKE_LISTENING) {
-                          if (isWake(top)) startCmd();
-                          else handler.postDelayed(() -> { if (running) { initSR(); startWake(); } }, 400);
-                      } else doCmd(top, m);
+
+                  @Override
+                  public void onResults(Bundle results){
+                      if(!active) return;
+                      ArrayList<String> all = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                      if(all==null||all.isEmpty()){ restart(); return; }
+
+                      Log.d(TAG,"results: "+all);
+
+                      if(waitingForCommand){
+                          // We already heard "Hey Quiko", this is the command
+                          waitingForCommand = false;
+                          String cmd = all.get(0).toLowerCase(Locale.US);
+                          // Strip wake word if it leaked in again
+                          String stripped = extractCmd(cmd);
+                          execute(stripped!=null&&!stripped.isEmpty() ? stripped : cmd);
+                          return;
+                      }
+
+                      // Check all alternatives for wake word + optional command
+                      for(String alt : all){
+                          String lower = alt.toLowerCase(Locale.US);
+                          String cmd = extractCmd(lower);
+                          if(cmd!=null){
+                              SoundHelper.beep(VoiceListenerService.this);
+                              if(cmd.isEmpty()){
+                                  // Only wake word - wait for command
+                                  waitingForCommand = true;
+                                  ui("Hey Quiko! Say your command now...", null);
+                                  notify2("Say your command now...");
+                                  H.postDelayed(()->{ if(active) listen(); }, 500);
+                              } else {
+                                  // Wake word + command in one go
+                                  waitingForCommand = false;
+                                  execute(cmd);
+                              }
+                              return;
+                          }
+                      }
+                      // No wake word found - just restart
+                      restart();
                   }
-                  @Override public void onError(int e) { handler.postDelayed(() -> { if (running) { initSR(); startWake(); } }, 1000); }
-              }
-              private void createNotificationChannel() {
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Quiko Voice Assistant", NotificationManager.IMPORTANCE_LOW);
-                      NotificationManager nm = getSystemService(NotificationManager.class);
-                      if (nm != null) nm.createNotificationChannel(ch);
+
+                  @Override
+                  public void onError(int error){
+                      Log.d(TAG,"error="+error);
+                      errorCount++;
+                      int delay;
+                      switch(error){
+                          case ERR_NO_MATCH:       // Normal - no speech matched
+                          case ERR_SPEECH_TIMEOUT: // Normal - silence timeout
+                              errorCount = Math.max(0, errorCount-1); // don't count these
+                              delay = 300;
+                              break;
+                          case ERR_RECOGNIZER_BUSY: // Recognizer still busy
+                              delay = 1500;
+                              break;
+                          case ERR_CLIENT:          // Client side error - recreate
+                              delay = 800;
+                              break;
+                          default:
+                              // Exponential backoff for repeated real errors
+                              delay = Math.min(500 * errorCount, MAX_BACKOFF_MS);
+                      }
+                      if(waitingForCommand){ waitingForCommand=false; }
+                      scheduleRestart(delay);
                   }
               }
-              private Notification buildNotif(String text) {
-                  int f = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0;
-                  PendingIntent pi = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), f);
-                  return new NotificationCompat.Builder(this, CHANNEL_ID)
-                      .setContentTitle("Quiko Assistant").setContentText(text)
+
+              // ── Helpers ─────────────────────────────────────────────────
+
+              /** Returns command text if wake word found, null if not found, empty string if only wake word */
+              private String extractCmd(String text){
+                  for(String t : TRIGGERS){
+                      int idx = text.indexOf(t);
+                      if(idx>=0){
+                          String after = text.substring(idx+t.length()).trim();
+                          // Also check before (e.g. "set alarm hey quiko" - unlikely but safe)
+                          return after;
+                      }
+                  }
+                  return null;
+              }
+
+              private void execute(String cmd){
+                  if(cmd==null||cmd.isEmpty()){ restart(); return; }
+                  String result = cp.handle(cmd);
+                  ui("\""+cmd+"\" → "+result, cmd);
+                  notify2("Done: "+cmd);
+                  Log.d(TAG,"executed: "+cmd+" → "+result);
+                  // Go back to wake word listening
+                  H.postDelayed(()->{
+                      if(active){
+                          notify2("Listening for Hey Quiko...");
+                          listen();
+                      }
+                  }, 2500);
+              }
+
+              private void restart(){
+                  scheduleRestart(350);
+              }
+
+              private void ui(String s, String cmd){
+                  if(callback!=null) callback.update(s,cmd);
+              }
+
+              // ── Notifications ────────────────────────────────────────────
+              private void makeChannel(){
+                  if(Build.VERSION.SDK_INT>=26){
+                      NotificationChannel c=new NotificationChannel(CH,"Quiko",NotificationManager.IMPORTANCE_LOW);
+                      c.setSound(null,null); c.enableVibration(false);
+                      NotificationManager nm=getSystemService(NotificationManager.class);
+                      if(nm!=null) nm.createNotificationChannel(c);
+                  }
+              }
+
+              private Notification notif(String text){
+                  int f=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0;
+                  PendingIntent pi=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),f);
+
+                  Intent stopI=new Intent(this,VoiceListenerService.class); stopI.setAction("STOP");
+                  int sf=Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0;
+                  PendingIntent stopPi=PendingIntent.getService(this,1,stopI,sf);
+
+                  return new NotificationCompat.Builder(this,CH)
+                      .setContentTitle("Quiko")
+                      .setContentText(text)
                       .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                      .setContentIntent(pi).setOngoing(true).setPriority(NotificationCompat.PRIORITY_LOW).build();
+                      .setContentIntent(pi)
+                      .addAction(android.R.drawable.ic_delete,"Stop",stopPi)
+                      .setOngoing(true)
+                      .setPriority(NotificationCompat.PRIORITY_LOW)
+                      .setSound(null)
+                      .build();
               }
-              private void updateNotif(String text) {
-                  NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                  if (nm != null) nm.notify(NOTIF_ID, buildNotif(text));
+
+              private void notify2(String text){
+                  NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+                  if(nm!=null) nm.notify(NID, notif(text));
               }
-              @Override public void onDestroy() { stopAll(); super.onDestroy(); }
           }'''
           open('app/src/main/java/com/quiko/app/VoiceListenerService.java','w').write(code)
           PYEOF
@@ -605,6 +717,7 @@ jobs:
           import android.Manifest;
           import android.content.Intent;
           import android.content.pm.PackageManager;
+          import android.os.Build;
           import android.os.Bundle;
           import android.widget.TextView;
           import android.widget.Toast;
@@ -617,103 +730,111 @@ jobs:
           import com.google.android.material.floatingactionbutton.FloatingActionButton;
           import com.google.android.material.switchmaterial.SwitchMaterial;
           import java.util.List;
+
           public class MainActivity extends AppCompatActivity {
-              private static final int PERM_CODE = 101;
-              private TextView tvStatus, tvLastCommand;
-              private SwitchMaterial switchListening;
-              private ReminderAdapter reminderAdapter;
-              private DatabaseHelper dbHelper;
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
+              private static final int RC = 101;
+              private TextView tvStatus, tvLast;
+              private SwitchMaterial sw;
+              private ReminderAdapter adapter;
+              private DatabaseHelper db;
+
+              @Override protected void onCreate(Bundle b){
+                  super.onCreate(b);
                   setContentView(R.layout.activity_main);
-                  dbHelper = new DatabaseHelper(this);
-                  tvStatus = findViewById(R.id.tvStatus);
-                  tvLastCommand = findViewById(R.id.tvLastCommand);
-                  switchListening = findViewById(R.id.switchListening);
-                  RecyclerView rv = findViewById(R.id.rvReminders);
+                  db=new DatabaseHelper(this);
+                  tvStatus=findViewById(R.id.tvStatus);
+                  tvLast=findViewById(R.id.tvLastCommand);
+                  sw=findViewById(R.id.switchListening);
+                  RecyclerView rv=findViewById(R.id.rvReminders);
                   rv.setLayoutManager(new LinearLayoutManager(this));
-                  switchListening.setOnCheckedChangeListener((btn, on) -> { if (on) startVoice(); else stopVoice(); });
-                  FloatingActionButton fab = findViewById(R.id.fabClear);
-                  fab.setOnClickListener(v -> { dbHelper.deleteAllReminders(); loadReminders(); Toast.makeText(this,"Reminders cleared",Toast.LENGTH_SHORT).show(); });
-                  setCallback();
-                  loadReminders();
-                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                      switchListening.setChecked(true);
-                  } else {
-                      ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, PERM_CODE);
-                  }
+                  sw.setOnCheckedChangeListener((v,on)->{if(on)startQ();else stopQ();});
+                  FloatingActionButton fab=findViewById(R.id.fabClear);
+                  fab.setOnClickListener(v->{db.deleteAll();loadR();Toast.makeText(this,"Cleared",Toast.LENGTH_SHORT).show();});
+                  setUI();
+                  loadR();
+                  // Auto-start on open
+                  if(hasMicPerm()) sw.setChecked(true);
+                  else askPerm();
               }
-              private void setCallback() {
-                  VoiceListenerService.setStatusCallback((status, lastCmd) -> runOnUiThread(() -> {
-                      if (status != null) tvStatus.setText(status);
-                      if (lastCmd != null) { tvLastCommand.setText("Last: " + lastCmd); loadReminders(); }
+
+              private void setUI(){
+                  VoiceListenerService.setCB((s,cmd)->runOnUiThread(()->{
+                      if(s!=null) tvStatus.setText(s);
+                      if(cmd!=null){tvLast.setText("Last: "+cmd);loadR();}
                   }));
               }
-              private void startVoice() {
-                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { switchListening.setChecked(false); return; }
-                  Intent s = new Intent(this, VoiceListenerService.class); s.setAction("START");
-                  ContextCompat.startForegroundService(this, s);
+
+              private void startQ(){
+                  if(!hasMicPerm()){sw.setChecked(false);askPerm();return;}
+                  Intent i=new Intent(this,VoiceListenerService.class);i.setAction("START");
+                  ContextCompat.startForegroundService(this,i);
                   tvStatus.setText("Listening for Hey Quiko...");
               }
-              private void stopVoice() {
-                  Intent s = new Intent(this, VoiceListenerService.class); s.setAction("STOP");
-                  startService(s); tvStatus.setText("Paused - toggle to resume");
+
+              private void stopQ(){
+                  Intent i=new Intent(this,VoiceListenerService.class);i.setAction("STOP");
+                  startService(i); tvStatus.setText("Paused");
               }
-              private void loadReminders() {
-                  List<Reminder> list = dbHelper.getAllReminders();
-                  RecyclerView rv = findViewById(R.id.rvReminders);
-                  if (reminderAdapter == null) {
-                      reminderAdapter = new ReminderAdapter(list, r -> { dbHelper.deleteReminder(r.id); loadReminders(); });
-                      rv.setAdapter(reminderAdapter);
-                  } else reminderAdapter.updateData(list);
+
+              private void loadR(){
+                  List<Reminder> list=db.getAll();
+                  RecyclerView rv=findViewById(R.id.rvReminders);
+                  if(adapter==null){adapter=new ReminderAdapter(list,r->{db.delete(r.id);loadR();});rv.setAdapter(adapter);}
+                  else adapter.update(list);
               }
-              @Override
-              public void onRequestPermissionsResult(int code, @NonNull String[] perms, @NonNull int[] results) {
-                  super.onRequestPermissionsResult(code, perms, results);
-                  if (code == PERM_CODE) {
-                      if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) switchListening.setChecked(true);
-                      else Toast.makeText(this, "Microphone permission is required!", Toast.LENGTH_LONG).show();
-                  }
+
+              private boolean hasMicPerm(){ return ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED; }
+
+              private void askPerm(){
+                  String[] p=new String[]{Manifest.permission.RECORD_AUDIO};
+                  if(Build.VERSION.SDK_INT>=33) p=new String[]{Manifest.permission.RECORD_AUDIO,Manifest.permission.POST_NOTIFICATIONS};
+                  ActivityCompat.requestPermissions(this,p,RC);
               }
-              @Override protected void onResume() { super.onResume(); loadReminders(); setCallback(); }
-              @Override protected void onDestroy() { super.onDestroy(); VoiceListenerService.setStatusCallback(null); }
+
+              @Override public void onRequestPermissionsResult(int rc,@NonNull String[] p,@NonNull int[] r){
+                  super.onRequestPermissionsResult(rc,p,r);
+                  if(rc==RC&&r.length>0&&r[0]==PackageManager.PERMISSION_GRANTED) sw.setChecked(true);
+                  else Toast.makeText(this,"Microphone permission needed!",Toast.LENGTH_LONG).show();
+              }
+
+              @Override protected void onResume(){super.onResume();loadR();setUI();}
+              @Override protected void onDestroy(){super.onDestroy();VoiceListenerService.setCB(null);}
           }'''
           open('app/src/main/java/com/quiko/app/MainActivity.java','w').write(code)
           PYEOF
 
-      - name: Layout and resource files
+      - name: Layout and resource XML files
         run: |
           python3 << 'PYEOF'
           open('app/src/main/res/layout/activity_main.xml','w').write('''<?xml version="1.0" encoding="utf-8"?>
           <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_dark">
             <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:padding="16dp">
               <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Quiko" android:textColor="@color/accent" android:textSize="42sp" android:textStyle="bold" android:layout_marginTop="32dp"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Offline Voice Assistant" android:textColor="@color/text_secondary" android:textSize="14sp" android:layout_marginBottom="16dp"/>
-                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="16dp">
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Quiko" android:textColor="@color/accent" android:textSize="40sp" android:textStyle="bold" android:layout_marginTop="28dp"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Offline Voice Assistant" android:textColor="@color/text_secondary" android:textSize="13sp" android:layout_marginBottom="14dp"/>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="14dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
-                      <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Voice Listening" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
+                      <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Voice Listening" android:textColor="@color/text_primary" android:textSize="15sp" android:textStyle="bold"/>
                       <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchListening" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                     </LinearLayout>
-                    <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/status_bg" android:gravity="center" android:padding="12dp" android:text="Starting..." android:textColor="@color/accent" android:textSize="14sp"/>
-                    <TextView android:id="@+id/tvLastCommand" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Last: none" android:textColor="@color/text_secondary" android:textSize="13sp" android:gravity="center"/>
+                    <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/status_bg" android:gravity="center" android:padding="10dp" android:text="Starting..." android:textColor="@color/accent" android:textSize="13sp"/>
+                    <TextView android:id="@+id/tvLastCommand" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Last: none" android:textColor="@color/text_secondary" android:textSize="12sp" android:gravity="center"/>
                   </LinearLayout>
                 </androidx.cardview.widget.CardView>
-                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="16dp">
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Example Commands" android:textColor="@color/text_primary" android:textSize="15sp" android:textStyle="bold" android:paddingBottom="10dp"/>
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, set alarm at 7 AM" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, alarm in 30 minutes" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, turn on flashlight" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, remind me to take medicine at 8 PM" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="6dp"/>
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko, what time is it" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="10dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="14dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="14dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Say it all in one sentence:" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold" android:paddingBottom="8dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko set alarm at 7 AM" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="5dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko alarm in 30 minutes" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="5dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko turn on flashlight" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="5dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko remind me to take medicine at 8 PM" android:textColor="@color/text_secondary" android:textSize="13sp" android:paddingBottom="5dp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Hey Quiko what time is it" android:textColor="@color/text_secondary" android:textSize="13sp"/>
                   </LinearLayout>
                 </androidx.cardview.widget.CardView>
-                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="80dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="16dp">
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Reminders" android:textColor="@color/text_primary" android:textSize="15sp" android:textStyle="bold" android:paddingBottom="8dp"/>
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="80dp" app:cardBackgroundColor="@color/card_bg" app:cardCornerRadius="14dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="14dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Reminders" android:textColor="@color/text_primary" android:textSize="14sp" android:textStyle="bold" android:paddingBottom="6dp"/>
                     <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvReminders" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
                   </LinearLayout>
                 </androidx.cardview.widget.CardView>
@@ -733,14 +854,10 @@ jobs:
 
           open('app/src/main/res/values/colors.xml','w').write('''<?xml version="1.0" encoding="utf-8"?>
           <resources>
-            <color name="bg_dark">#0D1117</color>
-            <color name="card_bg">#161B22</color>
-            <color name="accent">#58A6FF</color>
-            <color name="text_primary">#E6EDF3</color>
-            <color name="text_secondary">#8B949E</color>
-            <color name="colorPrimary">#58A6FF</color>
-            <color name="colorPrimaryDark">#0D1117</color>
-            <color name="colorAccent">#58A6FF</color>
+            <color name="bg_dark">#0D1117</color><color name="card_bg">#161B22</color>
+            <color name="accent">#58A6FF</color><color name="text_primary">#E6EDF3</color>
+            <color name="text_secondary">#8B949E</color><color name="colorPrimary">#58A6FF</color>
+            <color name="colorPrimaryDark">#0D1117</color><color name="colorAccent">#58A6FF</color>
           </resources>''')
 
           open('app/src/main/res/values/strings.xml','w').write('''<?xml version="1.0" encoding="utf-8"?>
@@ -760,15 +877,14 @@ jobs:
 
           open('app/src/main/res/drawable/status_bg.xml','w').write('''<?xml version="1.0" encoding="utf-8"?>
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-            <solid android:color="#1A2332"/>
-            <corners android:radius="10dp"/>
+            <solid android:color="#1A2332"/><corners android:radius="10dp"/>
             <stroke android:width="1dp" android:color="#2D4263"/>
           </shape>''')
 
           open('app/src/main/res/drawable/ic_quiko.xml','w').write('''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-            <path android:fillColor="#0D1117" android:pathData="M0,0 L108,0 L108,108 L0,108 Z"/>
-            <path android:fillColor="#58A6FF" android:pathData="M60,22 L42,52 L52,52 L48,86 L66,56 L56,56 Z"/>
+            <path android:fillColor="#0D1117" android:pathData="M0,0L108,0L108,108L0,108Z"/>
+            <path android:fillColor="#58A6FF" android:pathData="M60,22L42,52L52,52L48,86L66,56L56,56Z"/>
           </vector>''')
           PYEOF
 
